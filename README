@@ -1,0 +1,1 @@
+Given two similar dependencies, bytecode manipulate each so that they look like the other (throwing UnsupportedOperationException's where they differ). This is useful for two teams working on trunk based development, but they have different versions of libraries depended upon.
