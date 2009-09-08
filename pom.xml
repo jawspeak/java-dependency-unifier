@@ -6,13 +6,11 @@
   <packaging>pom</packaging>
   <version>0.0.1-SNAPSHOT</version>
   <name>Dependency Unifier Parent</name>
-  
   <modules>
     <module>dependency-unifier</module>
-    <!-- <module>dependency-unifier-testdependency-a</module> -->
+    <module>dependency-unifier-testdependency-a</module>
     <!-- <module>dependency-unifier-testdependency-b</module> -->
   </modules>
-  
   <build>
     <plugins>
       <plugin>
@@ -24,19 +22,28 @@
       </plugin>
     </plugins>
   </build>
-  
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>asm</groupId>
+        <artifactId>asm</artifactId>
+        <version>3.2</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.collections</groupId>
+        <artifactId>google-collections</artifactId>
+        <version>1.0-rc2</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.classpath-explorer</groupId>
+        <artifactId>classpath-explorer</artifactId>
+        <version>1.0</version>
+      </dependency>
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
         <version>4.6</version>
         <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>asm</groupId>
-        <artifactId>asm</artifactId>
-        <version>3.2</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

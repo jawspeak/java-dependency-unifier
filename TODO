@@ -1,0 +1,4 @@
+programatically modify contents in an existing jar, or a copy of an existing one
+
+how do i want to pass around the generated classes? As Classes in a custom classloader, or as a map of byte[], or GenClass holders that are metadata and byte[]?
+
