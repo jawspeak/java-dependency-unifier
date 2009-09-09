@@ -19,4 +19,13 @@ public class ClassPathDifferTest {
     assertEquals(Lists.newArrayList(), differ.changesNeededInBToMatchA());
     assertEquals(Lists.newArrayList(), differ.changesNeededInAToMatchB());
   }
+  
+  @Test
+  public void classNamesDifferent() throws Exception {
+    Map<String,ClassInfo> mapA = ImmutableMap.of("com.jawspeak.MyClass", new ClassInfo("com.jawspeak.MyClass"));
+    Map<String,ClassInfo> mapB = ImmutableMap.of("com.jawspeak.MyClassV2", new ClassInfo("com.jawspeak.MyClassV2"));
+    ClassPathDiffer differ = new ClassPathDiffer(mapA, mapB);
+    assertEquals(Lists.newArrayList(new AddClassPathModification(new ClassInfo("com.jawspeak.MyClass"))), differ.changesNeededInBToMatchA());
+    assertEquals(Lists.newArrayList(new AddClassPathModification(new ClassInfo("com.jawspeak.MyClassV2"))), differ.changesNeededInAToMatchB());
+  }
 }

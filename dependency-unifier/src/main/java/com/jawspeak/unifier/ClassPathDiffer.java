@@ -30,9 +30,8 @@ public class ClassPathDiffer {
     List<ClassPathModification> mods = Lists.newArrayList();
     for (Map.Entry<String, ClassInfo> entryA : desiredClasses.entrySet()) {
       String fqcnA = entryA.getKey();
-      ClassInfo classInfoA = entryA.getValue();
       if (!conformTheseToMatch.containsKey(fqcnA)) {
-        mods.add(new AddClassPathModification(classInfoA));
+        mods.add(new AddClassPathModification(entryA.getValue()));
       }
     }
     return mods;
