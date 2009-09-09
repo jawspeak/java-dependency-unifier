@@ -10,7 +10,7 @@ public class ClassGenerator {
     this.classModifications = classModifications;
   }
 
-  public void generate(String outputDir) {
+  public void generate() {
     // TODO how do i instead want to pass around generated classes? I don't want this, because it requires an output directory to test. byte[] or custom classloader?
     
   }
