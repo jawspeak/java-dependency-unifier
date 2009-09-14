@@ -45,7 +45,6 @@ public class Unifier {
      * Then same but add fields.
      * Then same but add whole classes.
      * Then, I've proven it out, and can check in.
-     * 
      */
     
 //    new ClassGenerator(classPathDiffer.changesNeededInAToMatchB()).generate();
