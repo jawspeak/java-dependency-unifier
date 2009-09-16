@@ -33,7 +33,7 @@ public class ReadJarWriteJarTest {
     File toDelete = new File(GENERATED_BYTECODE);
 //    System.out.println(toDelete + " exists? " + toDelete.exists());
 //    stackDelete(toDelete);
-    recursiveDelete(new File(GENERATED_BYTECODE));
+    recursiveDelete(toDelete);
 //    System.out.println(toDelete + " exists? " + toDelete.exists());
   }
 
@@ -71,7 +71,7 @@ public class ReadJarWriteJarTest {
   public void readsAndThenWritesJar() throws Exception {
     classPath = new ClassPathFactory().createFromPath("src/test/resources/single-class-in-jar.jar");
     String[] resources = classPath.findResources("", new RegExpResourceFilter(ANY, ENDS_WITH_CLASS));
-    System.out.println("resources=" + Arrays.deepToString(resources));
+    assertEquals("[com/jawspeak/unifier/dummy/DoNothingClass1.class]", Arrays.deepToString(resources));
     
     assertFalse("no dots in path", classPath.isPackage("."));
     assertFalse(classPath.isPackage("com.jawspeak.unifier.dummy"));
@@ -98,7 +98,7 @@ public class ReadJarWriteJarTest {
   public void readsPassesThroughAsmThenWritesJar() throws Exception {
     classPath = new ClassPathFactory().createFromPath("src/test/resources/single-class-in-jar.jar");
     String[] resources = classPath.findResources("", new RegExpResourceFilter(ANY, ENDS_WITH_CLASS));
-    System.out.println("resources=" + Arrays.deepToString(resources));
+    assertEquals("[com/jawspeak/unifier/dummy/DoNothingClass1.class]", Arrays.deepToString(resources));
     
     assertFalse("no dots in path", classPath.isPackage("."));
     assertFalse(classPath.isPackage("com.jawspeak.unifier.dummy"));
@@ -143,9 +143,27 @@ public class ReadJarWriteJarTest {
     for (int i = 0; i < originalMethods.length; i++) { 
       assertEquals(originalMethods[i].toString(), newMethods[i].toString());
     }
+    
+    // Create a new jar from the newly asm-generated classes
+    String command = "jar cf " + GENERATED_BYTECODE + "/single-class-in-jar-asm-modified.jar -C " + generatedBytecodeDir + " .";
+    Process process = Runtime.getRuntime().exec(command);
+    process.waitFor();
+    String stdout = new String(readInputStream(process.getInputStream()).toByteArray());
+    String stderr = new String(readInputStream(process.getErrorStream()).toByteArray());
+    assertEquals("", stdout);
+    assertEquals("", stderr);
+    assertTrue(new File(GENERATED_BYTECODE + "/single-class-in-jar-asm-modified.jar").exists());
+    
+    // Then we should be able to read back out the new jar, with all the same resources.
+    classPath = new ClassPathFactory().createFromPath(GENERATED_BYTECODE + "/single-class-in-jar-asm-modified.jar");
+    assertTrue(classPath.isPackage("/"));
+    assertTrue(classPath.isPackage("/com"));
+    assertTrue(classPath.isPackage("com"));
+    assertTrue(classPath.isPackage("com/jawspeak/unifier/dummy"));
+    assertTrue(classPath.isPackage("com/jawspeak/unifier/dummy/"));
+    assertTrue(classPath.isResource("com/jawspeak/unifier/dummy/DoNothingClass1.class"));
   }
 
-  
   
   private void writeOutDirectFiles(String outputDir, String[] resources) throws IOException {
     File outputBase = new File(outputDir);
