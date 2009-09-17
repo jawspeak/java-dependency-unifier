@@ -30,7 +30,7 @@ public class Unifier {
     ClassPathDiffer classPathDiffer = new ClassPathDiffer(jarAClasses, jarBClasses);
 
     /* I'm looking at programmatically:
-     *  - creating a class that is completly missing
+     *  - creating a class that is completely missing
      *  - modifying an existing class that exists as an input stream in the ClassPath.
      * 
      * So, there are two algorithm choices:
@@ -47,6 +47,7 @@ public class Unifier {
      * Then keep using same (previous) manifests
      * Then keep using original jar's resources
      * Then write out new jar file.
+     * 
      */
     
 //    new ClassGenerator(classPathDiffer.changesNeededInAToMatchB()).generate();

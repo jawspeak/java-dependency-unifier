@@ -4,6 +4,7 @@ import static com.google.classpath.RegExpResourceFilter.ANY;
 import static com.google.classpath.RegExpResourceFilter.ENDS_WITH_CLASS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -12,6 +13,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -24,6 +26,7 @@ import org.objectweb.asm.ClassAdapter;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -187,15 +190,28 @@ public class ReadJarWriteJarTest {
       this.parameters = Lists.newArrayList(parameters);
       this.returnClazz = returnClazz;
     }
-    
+    public String myString = "some value";
   }
 
-  static class MethodAddingClassAdapter extends ClassAdapter {
-    private ShimMethod newMethod;
+  static class AddingClassAdapter extends ClassAdapter {
+    private ShimMethod newMethod; // could be a list
+    private ShimField newField;
 
-    public MethodAddingClassAdapter(ClassVisitor writer, ShimMethod newMethod) {
+    public AddingClassAdapter(ClassVisitor writer, ShimMethod newMethod, ShimField newField) {
       super(writer);
       this.newMethod = newMethod;
+      this.newField = newField;
+    }
+    
+    @Override
+    public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+      if (newField != null) {
+        // Just this will add the field, but not set it to the default value. Thus it'll let compilation work, but may fail with runtime. (NPE)
+        FieldVisitor fv = super.visitField(Opcodes.ACC_PUBLIC, newField.name, newField.desc, null, null);
+        fv.visitEnd();
+        newField = null;
+      }
+      return super.visitField(access, name, desc, signature, value);
     }
     
     @Override
@@ -265,7 +281,52 @@ public class ReadJarWriteJarTest {
     } 
   }
 
-
+  class ShimField {
+    String name;
+    String desc;
+    int access;
+    public ShimField(String fieldName, String desc, int access) {
+      this.name = fieldName;
+      this.desc = desc;
+      this.access = access;
+    }
+  }
+  
+  @Test
+  public void readsAsmAddsField() throws Exception {
+    classPath = new ClassPathFactory().createFromPath("src/test/resources/single-class-in-jar.jar");
+    String[] resources = classPath.findResources("", new RegExpResourceFilter(ANY, ENDS_WITH_CLASS));
+    final byte[] originalClassBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
+    String generatedBytecodeDir = GENERATED_BYTECODE + "/read-then-asm-adds-field/";
+      
+    ShimField newField = new ShimField("myString", "Ljava/lang/String;", 3); 
+    
+    writeOutAsmFilesWithNewField(generatedBytecodeDir, resources, newField);
+    
+    classPath = new ClassPathFactory().createFromPath(generatedBytecodeDir);
+    final byte[] newBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
+    assertTrue(newBytes.length > 0);
+    
+    class MyClassLoader extends ClassLoader {
+      Class<?> clazz;
+    }
+    MyClassLoader originalClassLoader = new MyClassLoader() {{
+      clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", originalClassBytes, 0, originalClassBytes.length);
+    }};
+    MyClassLoader newClassLoader = new MyClassLoader() {{
+      clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", newBytes, 0, newBytes.length);
+    }};
+    
+    Class<?> originalClass = originalClassLoader.clazz;
+    Class<?> newClass = newClassLoader.clazz;
+    Field[] originalFields = originalClass.getFields();
+    Field[] newFields = newClass.getFields();
+    assertEquals(1, originalFields.length);
+    assertEquals(2, newFields.length);
+    assertNotNull(newClass.getField("myString"));
+  }
+  
+  
   private void writeOutDirectFiles(String outputDir, String[] resources) throws IOException {
     File outputBase = new File(outputDir);
     outputBase.mkdir();
@@ -315,13 +376,33 @@ public class ReadJarWriteJarTest {
       ClassReader reader = new ClassReader(is);
       ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
       // The key: insert an adapter in here, as discussed in 2.2.4 of asm guide pdf.
-      MethodAddingClassAdapter adapter = new MethodAddingClassAdapter(writer, newMethod);
+      AddingClassAdapter adapter = new AddingClassAdapter(writer, newMethod, null);
       reader.accept(adapter, 0);
       FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
       os.write(writer.toByteArray());
       os.close();
     }
-    
+  }
+  
+  private void writeOutAsmFilesWithNewField(String outputBaseDir, String[] resources,
+      ShimField newField) throws IOException {
+    File outputBase = new File(outputBaseDir);
+    outputBase.mkdir();
+    for (String resource : resources) {
+      String[] pathAndFile = splitResourceToPathAndFile(resource);
+      File packageDir = new File(outputBase, pathAndFile[0]);
+      packageDir.mkdirs();
+      InputStream is = classPath.getResourceAsStream(resource);
+      
+      ClassReader reader = new ClassReader(is);
+      ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+      // The key: insert an adapter in here, as discussed in 2.2.4 of asm guide pdf.
+      AddingClassAdapter adapter = new AddingClassAdapter(writer, null, newField);
+      reader.accept(adapter, 0);
+      FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
+      os.write(writer.toByteArray());
+      os.close();
+    }
   }
   
   private ByteArrayOutputStream readInputStream(InputStream is) throws IOException {
