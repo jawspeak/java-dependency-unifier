@@ -42,12 +42,16 @@ public class Unifier {
      * To prove this out, I need a spike: spike is to read a jar, and then build a jar. Same jar.
      * [Done 9-15] Then read a jar, and build a jar, same jar, but pass it through asm's tool to visit everything and copy it. No changes made.
      * [Done 9-16] Then same as above, but add methods, processing bytes and not necessarily writing files/jar.
-     * Then same but add fields.
+     * [Done 9-16] Then same but add fields.
      * Then same but add whole classes.
-     * Then keep using same (previous) manifests
-     * Then keep using original jar's resources
+     * Then build a diff between the two classes. Show how they differ.
+     * Put the pieces together with Diffing two jars, and creating a combined common api.
+     * Then take principles I learned in the spike and build something more robust and test driven.
      * Then write out new jar file.
      * 
+     * Future Feature Roadmap:
+     * Then keep using same (previous) manifests
+     * Then keep using original jar's resources
      */
     
 //    new ClassGenerator(classPathDiffer.changesNeededInAToMatchB()).generate();
