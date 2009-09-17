@@ -5,26 +5,36 @@ import static com.google.classpath.RegExpResourceFilter.ENDS_WITH_CLASS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Stack;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.objectweb.asm.ClassAdapter;
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 
 import com.google.classpath.ClassPath;
 import com.google.classpath.ClassPathFactory;
 import com.google.classpath.RegExpResourceFilter;
+import com.google.common.collect.Lists;
 
 public class ReadJarWriteJarTest {
+  
   private ClassPath classPath;
   private static final String GENERATED_BYTECODE = "target/test-generated-bytecode";
   
@@ -163,8 +173,99 @@ public class ReadJarWriteJarTest {
     assertTrue(classPath.isPackage("com/jawspeak/unifier/dummy/"));
     assertTrue(classPath.isResource("com/jawspeak/unifier/dummy/DoNothingClass1.class"));
   }
-
   
+  static class ShimMethod {
+    private String name;
+    private List<Class<?>> parameters;
+    private Class<?> returnClazz;
+    private final String thisClassDesc;
+    
+    public ShimMethod(String name, String thisClassDesc, Class<?> returnClazz, Class<?>... parameters) {
+      super();
+      this.name = name;
+      this.thisClassDesc = thisClassDesc;
+      this.parameters = Lists.newArrayList(parameters);
+      this.returnClazz = returnClazz;
+    }
+    
+  }
+
+  static class MethodAddingClassAdapter extends ClassAdapter {
+    private ShimMethod newMethod;
+
+    public MethodAddingClassAdapter(ClassVisitor writer, ShimMethod newMethod) {
+      super(writer);
+      this.newMethod = newMethod;
+    }
+    
+    @Override
+    public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+      // could also have a List<Runnable> like Misko did and record what i want to do in here, then execute it at end.
+      if (newMethod != null) {
+        // TODO handle these params via helper classes / the ShimClass's methods.
+        // I created this code with the ASMifier eclipse plugin tool.
+        MethodVisitor mv = super.visitMethod(Opcodes.ACC_PUBLIC, newMethod.name, "()V", null, null);
+        mv.visitCode();
+        Label l0 = new Label();
+        mv.visitLabel(l0);
+        mv.visitTypeInsn(Opcodes.NEW, "java/lang/UnsupportedOperationException");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn("Operation added to unify interfaces for compile time, but should not be called.");
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/UnsupportedOperationException", "<init>", "(Ljava/lang/String;)V");
+        mv.visitInsn(Opcodes.ATHROW);
+        Label l1 = new Label();
+        mv.visitLabel(l1);
+        mv.visitLocalVariable("this", newMethod.thisClassDesc, null, l0, l1, 0);
+        mv.visitEnd();
+        mv.visitMaxs(3, 1);
+        newMethod = null;
+      }
+      return super.visitMethod(access, name, desc, signature, exceptions);
+    }
+  }
+  
+  @Test
+  public void readsAsmAddsMethod() throws Exception {
+    classPath = new ClassPathFactory().createFromPath("src/test/resources/single-class-in-jar.jar");
+    String[] resources = classPath.findResources("", new RegExpResourceFilter(ANY, ENDS_WITH_CLASS));
+    final byte[] originalClassBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
+    String generatedBytecodeDir = GENERATED_BYTECODE + "/read-then-asm-adds-method/";
+      
+    ShimMethod newMethod = new ShimMethod("myNewMethod", "Lcom/jawspeak/unifier/dummy/DoNothingClass1;", void.class); 
+    
+    writeOutAsmFilesWithNewMethod(generatedBytecodeDir, resources, newMethod);
+    
+    classPath = new ClassPathFactory().createFromPath(generatedBytecodeDir);
+    final byte[] newBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
+    assertTrue(newBytes.length > 0);
+    
+    class MyClassLoader extends ClassLoader {
+      Class<?> clazz;
+    }
+    MyClassLoader originalClassLoader = new MyClassLoader() {{
+      clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", originalClassBytes, 0, originalClassBytes.length);
+    }};
+    MyClassLoader newClassLoader = new MyClassLoader() {{
+      clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", newBytes, 0, newBytes.length);
+    }};
+    
+    Class<?> originalClass = originalClassLoader.clazz;
+    Class<?> newClass = newClassLoader.clazz;
+    Method[] originalMethods = originalClass.getMethods();
+    Method[] newMethods = newClass.getMethods();
+    assertEquals(10, originalMethods.length);
+    assertEquals(11, newMethods.length);
+    newClass.getMethod("method1", String.class).invoke(newClass.newInstance(), ""); // should not have any exceptions
+    try {
+      newClass.getMethod("myNewMethod").invoke(newClass.newInstance());
+      fail("Expected Exception: Should have thrown exception in new method we just generated");
+    } catch (InvocationTargetException expected) { 
+      UnsupportedOperationException cause = (UnsupportedOperationException) expected.getCause();
+      assertEquals("Operation added to unify interfaces for compile time, but should not be called.", cause.getMessage());
+    } 
+  }
+
+
   private void writeOutDirectFiles(String outputDir, String[] resources) throws IOException {
     File outputBase = new File(outputDir);
     outputBase.mkdir();
@@ -199,6 +300,28 @@ public class ReadJarWriteJarTest {
       os.write(writer.toByteArray());
       os.close();
     }
+  }
+  
+  private void writeOutAsmFilesWithNewMethod(String outputBaseDir, String[] resources,
+      ShimMethod newMethod) throws IOException {
+    File outputBase = new File(outputBaseDir);
+    outputBase.mkdir();
+    for (String resource : resources) {
+      String[] pathAndFile = splitResourceToPathAndFile(resource);
+      File packageDir = new File(outputBase, pathAndFile[0]);
+      packageDir.mkdirs();
+      InputStream is = classPath.getResourceAsStream(resource);
+      
+      ClassReader reader = new ClassReader(is);
+      ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+      // The key: insert an adapter in here, as discussed in 2.2.4 of asm guide pdf.
+      MethodAddingClassAdapter adapter = new MethodAddingClassAdapter(writer, newMethod);
+      reader.accept(adapter, 0);
+      FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
+      os.write(writer.toByteArray());
+      os.close();
+    }
+    
   }
   
   private ByteArrayOutputStream readInputStream(InputStream is) throws IOException {

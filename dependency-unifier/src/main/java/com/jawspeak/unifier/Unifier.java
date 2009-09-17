@@ -40,11 +40,13 @@ public class Unifier {
      * My hunch is #2 is the proper approach. But that's because I don't know how to do 1. 
      * 
      * To prove this out, I need a spike: spike is to read a jar, and then build a jar. Same jar.
-     * Then read a jar, and build a jar, same jar, but pass it through asm's tool to visit everything and copy it. No changes made.
-     * Then same as above, but add methods, writing it out to file.
+     * [Done 9-15] Then read a jar, and build a jar, same jar, but pass it through asm's tool to visit everything and copy it. No changes made.
+     * [Done 9-16] Then same as above, but add methods, processing bytes and not necessarily writing files/jar.
      * Then same but add fields.
      * Then same but add whole classes.
-     * Then, I've proven it out, and can check in.
+     * Then keep using same (previous) manifests
+     * Then keep using original jar's resources
+     * Then write out new jar file.
      */
     
 //    new ClassGenerator(classPathDiffer.changesNeededInAToMatchB()).generate();
