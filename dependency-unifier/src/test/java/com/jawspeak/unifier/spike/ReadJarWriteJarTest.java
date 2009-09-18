@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Stack;
 
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.objectweb.asm.ClassAdapter;
 import org.objectweb.asm.ClassReader;
@@ -194,28 +195,37 @@ public class ReadJarWriteJarTest {
   }
 
   static class AddingClassAdapter extends ClassAdapter {
+    private final ShimClass newClass;
+
+    public AddingClassAdapter(ClassVisitor writer, ShimClass newClass) {
+      super(writer);
+      this.newClass = newClass;
+    }
+    // TODO: I think we just need to call lots of different visitors in here. VIsit field, visit method, visit etc. 
+    @Override
+    public void visit(int arg0, int arg1, String arg2, String arg3, String arg4, String[] arg5) {
+      // TODO Auto-generated method stub
+      super.visit(arg0, arg1, arg2, arg3, arg4, arg5);
+    }
+  }
+  
+  static class ModifyingClassAdapter extends ClassAdapter {
     private ShimMethod newMethod; // could be a list
     private ShimField newField;
 
-    public AddingClassAdapter(ClassVisitor writer, ShimMethod newMethod, ShimField newField) {
+    public ModifyingClassAdapter(ClassVisitor writer, ShimMethod newMethod, ShimField newField) {
       super(writer);
       this.newMethod = newMethod;
       this.newField = newField;
     }
     
     @Override
-    public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+    public void visitEnd() {
       if (newField != null) {
         // Just this will add the field, but not set it to the default value. Thus it'll let compilation work, but may fail with runtime. (NPE)
         FieldVisitor fv = super.visitField(Opcodes.ACC_PUBLIC, newField.name, newField.desc, null, null);
         fv.visitEnd();
-        newField = null;
       }
-      return super.visitField(access, name, desc, signature, value);
-    }
-    
-    @Override
-    public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
       // could also have a List<Runnable> like Misko did and record what i want to do in here, then execute it at end.
       if (newMethod != null) {
         // TODO handle these params via helper classes / the ShimClass's methods.
@@ -234,10 +244,11 @@ public class ReadJarWriteJarTest {
         mv.visitLocalVariable("this", newMethod.thisClassDesc, null, l0, l1, 0);
         mv.visitEnd();
         mv.visitMaxs(3, 1);
-        newMethod = null;
       }
-      return super.visitMethod(access, name, desc, signature, exceptions);
+      
+      super.visitEnd();
     }
+    
   }
   
   @Test
@@ -326,6 +337,55 @@ public class ReadJarWriteJarTest {
     assertNotNull(newClass.getField("myString"));
   }
   
+  static class ShimClass {
+    private final String name;
+    private final ShimField field;
+    private final ShimMethod method;
+
+    ShimClass(String name, ShimMethod method, ShimField field) {
+      this.name = name;
+      this.method = method;
+      this.field = field;
+    }
+  }
+
+  @Ignore("Until check in above fixes real quick")
+  @Test
+  public void readsAsmAddsNewClass() throws Exception {
+    classPath = new ClassPathFactory().createFromPath("src/test/resources/single-class-in-jar.jar");
+    String[] resources = classPath.findResources("", new RegExpResourceFilter(ANY, ENDS_WITH_CLASS));
+    final byte[] originalClassBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
+    String generatedBytecodeDir = GENERATED_BYTECODE + "/read-then-asm-adds-field/";
+
+    ShimField newField = new ShimField("myString", "Ljava/lang/String;", 3); 
+    ShimMethod newMethod = new ShimMethod("myNewMethod", "Lcom/jawspeak/unifier/dummy/DoNothingClass1;", void.class); 
+    ShimClass shimClass = new ShimClass("xyzName", newMethod, newField);
+    
+    writeOutAsmFilesWithNewClass(generatedBytecodeDir, resources, shimClass);
+    
+    classPath = new ClassPathFactory().createFromPath(generatedBytecodeDir);
+    final byte[] newBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
+    assertTrue(newBytes.length > 0);
+    
+    class MyClassLoader extends ClassLoader {
+      Class<?> clazz;
+    }
+    MyClassLoader originalClassLoader = new MyClassLoader() {{
+      clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", originalClassBytes, 0, originalClassBytes.length);
+    }};
+    MyClassLoader newClassLoader = new MyClassLoader() {{
+      clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", newBytes, 0, newBytes.length);
+    }};
+    
+    Class<?> originalClass = originalClassLoader.clazz;
+    Class<?> newClass = newClassLoader.clazz;
+    Field[] originalFields = originalClass.getFields();
+    Field[] newFields = newClass.getFields();
+    assertEquals(1, originalFields.length);
+    assertEquals(2, newFields.length);
+    assertNotNull(newClass.getField("myString"));
+  }
+  
   
   private void writeOutDirectFiles(String outputDir, String[] resources) throws IOException {
     File outputBase = new File(outputDir);
@@ -355,7 +415,7 @@ public class ReadJarWriteJarTest {
       // Ends up just copying the byte array, but next we'll look at inserting something 
       // interesting in between them.
       ClassReader reader = new ClassReader(is);
-      ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+      ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES);
       reader.accept(writer, 0);
       FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
       os.write(writer.toByteArray());
@@ -374,9 +434,9 @@ public class ReadJarWriteJarTest {
       InputStream is = classPath.getResourceAsStream(resource);
       
       ClassReader reader = new ClassReader(is);
-      ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+      ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES);
       // The key: insert an adapter in here, as discussed in 2.2.4 of asm guide pdf.
-      AddingClassAdapter adapter = new AddingClassAdapter(writer, newMethod, null);
+      ModifyingClassAdapter adapter = new ModifyingClassAdapter(writer, newMethod, null);
       reader.accept(adapter, 0);
       FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
       os.write(writer.toByteArray());
@@ -395,9 +455,31 @@ public class ReadJarWriteJarTest {
       InputStream is = classPath.getResourceAsStream(resource);
       
       ClassReader reader = new ClassReader(is);
-      ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+      ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES);
       // The key: insert an adapter in here, as discussed in 2.2.4 of asm guide pdf.
-      AddingClassAdapter adapter = new AddingClassAdapter(writer, null, newField);
+      ModifyingClassAdapter adapter = new ModifyingClassAdapter(writer, null, newField);
+      reader.accept(adapter, 0);
+      FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
+      os.write(writer.toByteArray());
+      os.close();
+    }
+  }
+  
+
+  private void writeOutAsmFilesWithNewClass(String outputBaseDir, String[] resources,
+      ShimClass newClass) throws IOException {
+    File outputBase = new File(outputBaseDir);
+    outputBase.mkdir();
+    for (String resource : resources) {
+      String[] pathAndFile = splitResourceToPathAndFile(resource);
+      File packageDir = new File(outputBase, pathAndFile[0]);
+      packageDir.mkdirs();
+      InputStream is = classPath.getResourceAsStream(resource);
+      
+      ClassReader reader = new ClassReader(is);
+      ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES);
+      // The key: insert an adapter in here, as discussed in 2.2.4 of asm guide pdf.
+      ModifyingClassAdapter adapter = new ModifyingClassAdapter(writer, null, null);
       reader.accept(adapter, 0);
       FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
       os.write(writer.toByteArray());
