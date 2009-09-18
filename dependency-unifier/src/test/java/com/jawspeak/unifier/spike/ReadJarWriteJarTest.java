@@ -184,6 +184,7 @@ public class ReadJarWriteJarTest {
     private List<Class<?>> parameters;
     private Class<?> returnClazz;
     private final String thisClassDesc;
+    private boolean isStatic; // TODO don't push this on local variables part, if it is static
     
     public ShimMethod(String name, String thisClassDesc, Class<?> returnClazz, Class<?>... parameters) {
       super();
