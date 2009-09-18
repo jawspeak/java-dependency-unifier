@@ -31,6 +31,7 @@ import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 
 import com.google.classpath.ClassPath;
 import com.google.classpath.ClassPathFactory;
@@ -191,7 +192,6 @@ public class ReadJarWriteJarTest {
       this.parameters = Lists.newArrayList(parameters);
       this.returnClazz = returnClazz;
     }
-    public String myString = "some value";
   }
 
   static class AddingClassAdapter extends ClassAdapter {
@@ -223,7 +223,7 @@ public class ReadJarWriteJarTest {
     public void visitEnd() {
       if (newField != null) {
         // Just this will add the field, but not set it to the default value. Thus it'll let compilation work, but may fail with runtime. (NPE)
-        FieldVisitor fv = super.visitField(Opcodes.ACC_PUBLIC, newField.name, newField.desc, null, null);
+        FieldVisitor fv = super.visitField(newField.access, newField.name, newField.desc, null, null);
         fv.visitEnd();
       }
       // could also have a List<Runnable> like Misko did and record what i want to do in here, then execute it at end.
@@ -310,7 +310,7 @@ public class ReadJarWriteJarTest {
     final byte[] originalClassBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
     String generatedBytecodeDir = GENERATED_BYTECODE + "/read-then-asm-adds-field/";
       
-    ShimField newField = new ShimField("myString", "Ljava/lang/String;", 3); 
+    ShimField newField = new ShimField("myString", Type.getDescriptor(String.class), Opcodes.ACC_PUBLIC); 
     
     writeOutAsmFilesWithNewField(generatedBytecodeDir, resources, newField);
     
@@ -357,7 +357,7 @@ public class ReadJarWriteJarTest {
     final byte[] originalClassBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
     String generatedBytecodeDir = GENERATED_BYTECODE + "/read-then-asm-adds-field/";
 
-    ShimField newField = new ShimField("myString", "Ljava/lang/String;", 3); 
+    ShimField newField = new ShimField("myString", Type.getInternalName(String.class), Opcodes.ACC_PUBLIC); 
     ShimMethod newMethod = new ShimMethod("myNewMethod", "Lcom/jawspeak/unifier/dummy/DoNothingClass1;", void.class); 
     ShimClass shimClass = new ShimClass("xyzName", newMethod, newField);
     
