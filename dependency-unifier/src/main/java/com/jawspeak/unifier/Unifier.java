@@ -45,6 +45,8 @@ public class Unifier {
      * [Done 9-16] Then same but add fields.
      * [Done 10-12] Then same but add whole classes.
      * Then build a diff between the two classes. Show how they differ.
+     * Next up: a differ to diff between the files, and construct a changeset of the files that need to be altered. 
+     *    This will represent method/field/constructor/class additions from one to another classpath root. 
      * Put the pieces together with Diffing two jars, and creating a combined common api.
      * Then take principles I learned in the spike and build something more robust and test driven.
      * Then write out new jar file.
