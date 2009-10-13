@@ -43,7 +43,7 @@ public class Unifier {
      * [Done 9-15] Then read a jar, and build a jar, same jar, but pass it through asm's tool to visit everything and copy it. No changes made.
      * [Done 9-16] Then same as above, but add methods, processing bytes and not necessarily writing files/jar.
      * [Done 9-16] Then same but add fields.
-     * Then same but add whole classes.
+     * [Done 10-12] Then same but add whole classes.
      * Then build a diff between the two classes. Show how they differ.
      * Put the pieces together with Diffing two jars, and creating a combined common api.
      * Then take principles I learned in the spike and build something more robust and test driven.
