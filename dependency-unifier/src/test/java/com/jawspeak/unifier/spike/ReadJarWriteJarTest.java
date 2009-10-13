@@ -1,18 +1,14 @@
 package com.jawspeak.unifier.spike;
 
-import static com.google.classpath.RegExpResourceFilter.ANY;
-import static com.google.classpath.RegExpResourceFilter.ENDS_WITH_CLASS;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static com.google.classpath.RegExpResourceFilter.*;
+import static org.junit.Assert.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -21,7 +17,6 @@ import java.util.List;
 import java.util.Stack;
 
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.objectweb.asm.ClassAdapter;
 import org.objectweb.asm.ClassReader;
@@ -82,6 +77,13 @@ public class ReadJarWriteJarTest {
     }
   }
 
+  @Test
+  public void differenceBetweenInternalAndDescriptorName() throws Exception {
+    String descriptor = Type.getDescriptor(String.class);
+    String internalName = Type.getInternalName(String.class);
+    assertEquals(descriptor, "L" + internalName + ";");
+  }
+  
   @Test
   public void readsAndThenWritesJar() throws Exception {
     classPath = new ClassPathFactory().createFromPath("src/test/resources/single-class-in-jar.jar");
@@ -341,50 +343,60 @@ public class ReadJarWriteJarTest {
   static class ShimClass {
     private final String name;
     private final ShimField field;
-    private final ShimMethod method;
+    private final List<ShimMethod> methods;
+    private final int version = Opcodes.V1_5;
+    private final int access = Opcodes.ACC_PUBLIC + Opcodes.ACC_SUPER;
+//    private final String signature = null; TODO later
+    private final String superName;
+    private final String[] interfaces;
 
-    ShimClass(String name, ShimMethod method, ShimField field) {
+    ShimClass(String name, List<ShimMethod> methods, ShimField field, String superName, String... interfaces) {
       this.name = name;
-      this.method = method;
-      this.field = field;
+      this.methods = methods; // make plural
+      this.field = field; // make plural
+      this.superName = superName;
+      this.interfaces = interfaces;
     }
   }
 
-  @Ignore("Until check in above fixes real quick")
   @Test
   public void readsAsmAddsNewClass() throws Exception {
-    classPath = new ClassPathFactory().createFromPath("src/test/resources/single-class-in-jar.jar");
-    String[] resources = classPath.findResources("", new RegExpResourceFilter(ANY, ENDS_WITH_CLASS));
-    final byte[] originalClassBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
-    String generatedBytecodeDir = GENERATED_BYTECODE + "/read-then-asm-adds-field/";
+    String generatedBytecodeDir = GENERATED_BYTECODE + "/asm-adds-class/";
 
-    ShimField newField = new ShimField("myString", Type.getInternalName(String.class), Opcodes.ACC_PUBLIC); 
-    ShimMethod newMethod = new ShimMethod("myNewMethod", "Lcom/jawspeak/unifier/dummy/DoNothingClass1;", void.class); 
-    ShimClass shimClass = new ShimClass("xyzName", newMethod, newField);
+    ShimField newField = new ShimField("myString", Type.getDescriptor(String.class), Opcodes.ACC_PUBLIC); 
+    ShimMethod newMethodInit = new ShimMethod("<init>", "Lcom/jawspeak/unifier/dummy/DoNothingClass1;", void.class); 
+    ShimMethod newMethod1 = new ShimMethod("method1", "Lcom/jawspeak/unifier/dummy/DoNothingClass1;", void.class); 
+    ShimClass shimClass = new ShimClass("com/jawspeak/unifier/dummy/DoNothingClass1", Lists.newArrayList(newMethodInit, newMethod1), newField, "java/lang/Object");
     
-    writeOutAsmFilesWithNewClass(generatedBytecodeDir, resources, shimClass);
+    
+    writeOutAsmFilesWithNewClass(generatedBytecodeDir, shimClass);
+    
     
     classPath = new ClassPathFactory().createFromPath(generatedBytecodeDir);
     final byte[] newBytes = readInputStream(classPath.getResourceAsStream("com/jawspeak/unifier/dummy/DoNothingClass1.class")).toByteArray();
     assertTrue(newBytes.length > 0);
-    
+
     class MyClassLoader extends ClassLoader {
       Class<?> clazz;
     }
-    MyClassLoader originalClassLoader = new MyClassLoader() {{
-      clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", originalClassBytes, 0, originalClassBytes.length);
-    }};
     MyClassLoader newClassLoader = new MyClassLoader() {{
       clazz = defineClass("com.jawspeak.unifier.dummy.DoNothingClass1", newBytes, 0, newBytes.length);
     }};
     
-    Class<?> originalClass = originalClassLoader.clazz;
     Class<?> newClass = newClassLoader.clazz;
-    Field[] originalFields = originalClass.getFields();
-    Field[] newFields = newClass.getFields();
-    assertEquals(1, originalFields.length);
-    assertEquals(2, newFields.length);
+    assertEquals(1, newClass.getFields().length);
+    Method[] methods = newClass.getMethods(); 
+    Constructor[] constructors = newClass.getConstructors();
+    try {
+      newClass.newInstance();
+      fail("expected exception");
+    } catch (UnsupportedOperationException expected) {
+      assertTrue(expected.getMessage().contains("Operation added to unify interfaces for compile time, but should not be called."));
+    }
+    assertEquals(2 + 8, newClass.getMethods().length);
+    assertEquals(1, newClass.getConstructors().length);
     assertNotNull(newClass.getField("myString"));
+    assertNotNull(newClass.getMethod("method1"));
   }
   
   
@@ -467,25 +479,47 @@ public class ReadJarWriteJarTest {
   }
   
 
-  private void writeOutAsmFilesWithNewClass(String outputBaseDir, String[] resources,
-      ShimClass newClass) throws IOException {
+  private void writeOutAsmFilesWithNewClass(String outputBaseDir, ShimClass newClass) throws IOException {
     File outputBase = new File(outputBaseDir);
     outputBase.mkdir();
-    for (String resource : resources) {
-      String[] pathAndFile = splitResourceToPathAndFile(resource);
-      File packageDir = new File(outputBase, pathAndFile[0]);
-      packageDir.mkdirs();
-      InputStream is = classPath.getResourceAsStream(resource);
-      
-      ClassReader reader = new ClassReader(is);
-      ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES);
-      // The key: insert an adapter in here, as discussed in 2.2.4 of asm guide pdf.
-      ModifyingClassAdapter adapter = new ModifyingClassAdapter(writer, null, null);
-      reader.accept(adapter, 0);
-      FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1]));
-      os.write(writer.toByteArray());
-      os.close();
+    String[] pathAndFile = splitResourceToPathAndFile(newClass.name);
+    File packageDir = new File(outputBase, pathAndFile[0]);
+    packageDir.mkdirs();
+    
+    ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+    writer.visit(newClass.version, newClass.access, newClass.name, null, newClass.superName, newClass.interfaces);
+    if (newClass.field != null) {
+      ShimField newField = newClass.field;
+      // Just this will add the field, but not set it to the default value. Thus it'll let compilation work, but may fail with runtime. (NPE)
+      FieldVisitor fv = writer.visitField(newField.access, newField.name, newField.desc, null, null);
+      fv.visitEnd();
     }
+    
+    for (ShimMethod newMethod : newClass.methods) {
+    // could also have a List<Runnable> like Misko did and record what i want to do in here, then execute it at end.
+      if (newMethod != null) {
+        // TODO handle these params via helper classes / the ShimClass's methods.
+        // I created this code with the ASMifier eclipse plugin tool.
+        MethodVisitor mv = writer.visitMethod(Opcodes.ACC_PUBLIC, newMethod.name, "()V", null, null);
+        mv.visitCode();
+        Label l0 = new Label();
+        mv.visitLabel(l0);
+        mv.visitTypeInsn(Opcodes.NEW, "java/lang/UnsupportedOperationException");
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitLdcInsn("Operation added to unify interfaces for compile time, but should not be called.");
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/UnsupportedOperationException", "<init>", "(Ljava/lang/String;)V");
+        mv.visitInsn(Opcodes.ATHROW);
+        Label l1 = new Label();
+        mv.visitLabel(l1);
+        mv.visitLocalVariable("this", newMethod.thisClassDesc, null, l0, l1, 0);
+        mv.visitMaxs(3, 1);
+        mv.visitEnd();
+      }
+    }
+    writer.visitEnd();
+    FileOutputStream os = new FileOutputStream(new File(packageDir, pathAndFile[1] + ".class"));
+    os.write(writer.toByteArray());
+    os.close();
   }
   
   private ByteArrayOutputStream readInputStream(InputStream is) throws IOException {
