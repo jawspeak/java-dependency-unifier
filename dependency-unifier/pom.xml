@@ -36,6 +36,15 @@
 			<artifactId>asm</artifactId>
 		</dependency>
 		<dependency>
+      <groupId>asm</groupId>
+      <artifactId>asm-tree</artifactId>
+    </dependency>
+		<dependency>
+			 <groupId>org.mockito</groupId>
+			 <artifactId>mockito-all</artifactId>
+	  </dependency> 
+		     
+		<dependency>
 			<groupId>com.google.classpath-explorer</groupId>
 			<artifactId>classpath-explorer</artifactId>
 		</dependency>
