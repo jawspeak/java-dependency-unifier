@@ -538,13 +538,10 @@ public class ReadJarWriteJarTest {
   }
 
   private String[] splitResourceToPathAndFile(String resource) {
-    int i = resource.length() - 1;
-    while (i >= 0) {
-      if (resource.charAt(i) == '/') {
-        return new String[] {resource.substring(0, i), resource.substring(i + 1)};
-      }
-      i--;
+    int lastSlash = resource.lastIndexOf("/");
+    if (lastSlash == -1) {
+      return new String[] {"", resource};
     }
-    return new String[] {"", resource};
+    return new String[] {resource.substring(0, lastSlash), resource.substring(lastSlash, resource.length())};
   }
 }

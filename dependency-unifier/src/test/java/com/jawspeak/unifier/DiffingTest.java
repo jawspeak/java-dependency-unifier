@@ -6,14 +6,15 @@ import static org.mockito.Mockito.*;
 import static org.mockito.asm.Opcodes.*;
 
 import java.io.File;
-import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.Test;
 import org.mockito.asm.Opcodes;
 
 import com.google.classpath.ClassPath;
 import com.google.classpath.ClassPathFactory;
-import com.google.classpath.ResourceFilter;
+import com.google.classpath.RegExpResourceFilter;
 import com.google.common.collect.Lists;
 import com.jawspeak.unifier.Differ;
 import com.jawspeak.unifier.changes.Change;
@@ -98,14 +99,20 @@ public class DiffingTest {
   
   @Test
   public void sameClassnameDifferentFields() throws Exception {
-    System.out.println("Here is pwd: " + new File(".").getCanonicalPath());
-    ClassPath goldenClassPath = new ClassPathFactory().createFromPath("../dependency-unifier-testdependency-a/target/classes");
-    goldenClassPath.getResourceAsStream("../com/jawspeak/unifier/dummy/FieldDifference.class");
-    ClassPath classPath2 = new ClassPathFactory().createFromPath("dependency-unifier-testdependency-b/target/classes");
+    RegExpResourceFilter fieldDifferenceFilter = new RegExpResourceFilter(RegExpResourceFilter.ANY, ".*FieldDifference\\.class");
+    ClassPath goldenClassPath = new FilteringClassPath(
+        new ClassPathFactory().createFromPath("../dependency-unifier-testdependency-a/target/classes"), fieldDifferenceFilter);
+    ClassPath classPath2 = new FilteringClassPath(
+        new ClassPathFactory().createFromPath("../dependency-unifier-testdependency-b/target/classes"), fieldDifferenceFilter);
     
     Differ differ = new Differ(goldenClassPath, classPath2);
-    assertEquals(4, differ.changesetToUnify().size());
-    
+    List<Change> changesetToUnify = differ.changesetToUnify();
+    List<Change> expected = Lists.newArrayList();
+    expected.add(new NewField(ACC_PUBLIC + ACC_STATIC, "staticObjectField_A", "Ljava/lang/Object;", null, null));
+    expected.add(new NewField(ACC_PUBLIC + ACC_STATIC, "staticSelfField_A", "Lcom/jawspeak/unifier/dummy/FieldDifference;", null, null));
+    expected.add(new NewField(ACC_PUBLIC + ACC_STATIC, "staticStringField_A", "Ljava/lang/String;", null, null));
+    expected.add(new NewField(ACC_PUBLIC + ACC_STATIC, "staticIntField_A", "I", null, null));
+    assertEquals(expected, changesetToUnify);
   }
 
   @Test
