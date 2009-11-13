@@ -9,7 +9,7 @@
   <modules>
     <module>dependency-unifier</module>
     <module>dependency-unifier-testdependency-a</module>
-    <!-- <module>dependency-unifier-testdependency-b</module> -->
+    <module>dependency-unifier-testdependency-b</module>
   </modules>
   <build>
     <plugins>

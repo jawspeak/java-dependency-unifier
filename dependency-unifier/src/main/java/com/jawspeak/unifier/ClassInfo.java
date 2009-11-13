@@ -2,7 +2,7 @@ package com.jawspeak.unifier;
 
 public class ClassInfo {
 
-  private final String fullyQualifiedClassName;
+  final String fullyQualifiedClassName;
 
   public ClassInfo(String fullyQualifiedClassName) {
     this.fullyQualifiedClassName = fullyQualifiedClassName;

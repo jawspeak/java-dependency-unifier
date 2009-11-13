@@ -338,6 +338,7 @@ public class ReadJarWriteJarTest {
     assertEquals(1, originalFields.length);
     assertEquals(2, newFields.length);
     assertNotNull(newClass.getField("myString"));
+    assertNull(newClass.getField("myString").get(newClass.newInstance()));
   }
   
   static class ShimClass {

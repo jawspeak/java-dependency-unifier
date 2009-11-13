@@ -1,7 +1,10 @@
 package com.jawspeak.unifier;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -10,6 +13,7 @@ import java.util.Set;
 
 import com.google.classpath.ClassPath;
 import com.google.classpath.ResourceFilter;
+import com.google.common.collect.ImmutableMap;
 
 /**
  * Uses the JVM to load the limited number of classes that are specified as available.

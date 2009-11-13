@@ -5,12 +5,14 @@ import static org.mockito.Matchers.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.asm.Opcodes.*;
 
+import java.io.File;
 import java.io.InputStream;
 
 import org.junit.Test;
 import org.mockito.asm.Opcodes;
 
 import com.google.classpath.ClassPath;
+import com.google.classpath.ClassPathFactory;
 import com.google.classpath.ResourceFilter;
 import com.google.common.collect.Lists;
 import com.jawspeak.unifier.Differ;
@@ -80,7 +82,7 @@ public class DiffingTest {
   }
   
   @Test
-  public void differentClassesIsDifferent() throws Exception {
+  public void differentClassesAreDifferent() throws Exception {
     ClassPath goldenClassPath = new FakeClassPath(ClassA.class);
     ClassPath classPath2 = new FakeClassPath(ClassB.class);
     Differ differ = new Differ(goldenClassPath, classPath2);
@@ -93,6 +95,23 @@ public class DiffingTest {
     assertEquals(Lists.newArrayList(newClass), differ.changesetToUnify());
   }
   
+  
+  @Test
+  public void sameClassnameDifferentFields() throws Exception {
+    System.out.println("Here is pwd: " + new File(".").getCanonicalPath());
+    ClassPath goldenClassPath = new ClassPathFactory().createFromPath("../dependency-unifier-testdependency-a/target/classes");
+    goldenClassPath.getResourceAsStream("../com/jawspeak/unifier/dummy/FieldDifference.class");
+    ClassPath classPath2 = new ClassPathFactory().createFromPath("dependency-unifier-testdependency-b/target/classes");
+    
+    Differ differ = new Differ(goldenClassPath, classPath2);
+    assertEquals(4, differ.changesetToUnify().size());
+    
+  }
+
+  @Test
+  public void sameClassnameDifferentMethods() throws Exception {
+    
+  }
   
   public static class ClassSubB extends ClassB {
     public String fieldSubB;

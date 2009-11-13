@@ -25,7 +25,6 @@ public class ClassInfoMapBuilder {
 
   public Map<String, ClassInfo> calculate() {
     SortedSet<String> classNames = classesInPath(classPath);
-    System.out.println("ClassNames: " + classNames + " classPath: " + classPath);
     Map<String, ClassInfo> map = new HashMap<String, ClassInfo>();
     for (String className : classNames) {
       String fqcn = formatAsFullyQualifiedClassName(className);
